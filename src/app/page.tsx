@@ -7,6 +7,7 @@ import { Button as AriaButton, FileTrigger } from "react-aria-components";
 import { twMerge } from "tailwind-merge";
 import Image from "next/image";
 import { BRAIN_SIMILARITIES, BrainSimilarityType } from "#/constants";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const CATEGORIES_DATA = [
   { key: "brain", title: "Brain tumor detection", Icon: BrainIcon },
@@ -19,11 +20,12 @@ type CategoriesKey = (typeof CATEGORIES_DATA)[number]["key"];
 
 type AnalysisType = { state: BrainSimilarityType["brain_disease"] | "no_tumor"; size: number };
 
-const delay = (ms: number) => new Promise((_) => setTimeout(_, ms));
-
 function get_random<T>(list: T[]) {
   return list[Math.floor(Math.random() * list.length)];
 }
+
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_KEY ?? "");
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export default function Page() {
   const [selectedCategory, setSelectedCategory] = useState<CategoriesKey>(CATEGORIES_DATA[0]["key"]);
@@ -31,22 +33,38 @@ export default function Page() {
 
   const [analysisData, setAnalysisData] = useState<AnalysisType | null>(null);
   const [similarityData, setSimilarityData] = useState<BrainSimilarityType[] | null>(null);
+  const [suggestionText, setSuggestionText] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   async function handleUpload() {
-    setIsLoading(true);
-    await delay(5000);
-    setIsLoading(false);
-
     const rndm = parseFloat((Math.random() * 10).toFixed(2));
-    const randomSize = get_random([0, rndm, rndm]);
+    const randomSize = get_random([0, rndm, rndm, rndm]);
     setAnalysisData({ state: randomSize === 0 ? "no_tumor" : get_random(["glioma_tumor", "meningioma_tumor", "pituitary_tumor"]), size: randomSize });
   }
 
   useEffect(() => {
     analysisData !== null && setSimilarityData(BRAIN_SIMILARITIES.filter((item) => item.brain_disease === analysisData.state));
   }, [analysisData]);
+
+  async function fetchDataFromGemini() {
+    try {
+      setIsLoading(true);
+      const result = await model.generateContent(
+        "Please write overall text using those texts below (120-150 words):\n\n\n" + similarityData?.map((data) => data.main_page).join(", ") ?? "",
+      );
+      const text = result.response.text();
+      setIsLoading(false);
+      setSuggestionText(text);
+    } catch (error) {
+      setIsLoading(false);
+      console.error("fetchDataFromGeminiAPI error: ", error);
+    }
+  }
+
+  useEffect(() => {
+    similarityData && fetchDataFromGemini();
+  }, [similarityData]);
 
   return (
     <>
@@ -170,7 +188,7 @@ export default function Page() {
 
           {(similarityData !== null || isLoading) && (
             <section>
-              <div className="container space-y-12 pb-24 pt-12">
+              <div className="container space-y-12 py-12">
                 <h2 className="text-primary text-3xl font-bold uppercase underline max-lg:text-xl">Similar patients:</h2>
 
                 <div className="flex flex-col gap-6">
@@ -181,11 +199,34 @@ export default function Page() {
                       <Skeleton className="h-[calc(84*4px)] rounded-[14px]" />
                     </>
                   ) : analysisData?.state !== "no_tumor" ? (
-                    similarityData !== null && similarityData.map((data) => <PatientCard key={data.full_name} {...data} />)
+                    similarityData !== null && similarityData.slice(0, 3).map((data) => <PatientCard key={data.full_name} {...data} />)
                   ) : (
                     <p className="text-xl font-bold uppercase">Patient has a good condition</p>
                   )}
                 </div>
+              </div>
+            </section>
+          )}
+
+          {(suggestionText !== null || isLoading) && (
+            <section>
+              <div className="container space-y-12 pb-24 pt-12">
+                <h2 className="text-primary text-3xl font-bold uppercase underline max-lg:text-xl">Overall suggestion:</h2>
+
+                {isLoading ? (
+                  <div className="space-y-[10px] py-[5px]">
+                    <Skeleton className="h-[18px] rounded-full" />
+                    <Skeleton className="h-[18px] rounded-full" />
+                    <Skeleton className="h-[18px] rounded-full" />
+                    <Skeleton className="h-[18px] rounded-full" />
+                    <Skeleton className="h-[18px] rounded-full" />
+                    <Skeleton className="h-[18px] rounded-full" />
+                    <Skeleton className="h-[18px] rounded-full" />
+                    <Skeleton className="h-[18px] rounded-full" />
+                  </div>
+                ) : (
+                  <p className="text-lg">{suggestionText}</p>
+                )}
               </div>
             </section>
           )}
