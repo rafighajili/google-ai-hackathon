@@ -225,7 +225,7 @@ export default function Page() {
                     <Skeleton className="h-[18px] rounded-full" />
                   </div>
                 ) : (
-                  <p className="text-lg">{suggestionText}</p>
+                  <p className="text-lg">{analysisData?.state !== "no_tumor" ? suggestionText : "No any suggestion"}</p>
                 )}
               </div>
             </section>
